@@ -1,6 +1,10 @@
 {
-  "name": "reactivetable",
   "tree": {
-      "$path": "src"
+    "$className": "DataModel",
+    "ServerScriptService": {
+      "ReactiveTable": {
+        "$path": "src"
+      }
+    }
   }
 }
