@@ -78,7 +78,7 @@ function Connection:Disconnect()
 	if self._signal._handlerListHead == self then
 		self._signal._handlerListHead = self._next
 	else
-		local prev = self._signal._prev
+		local prev = self._prev
 		if prev then
 			prev._next = self._next
 		end
