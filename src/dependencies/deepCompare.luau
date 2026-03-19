@@ -16,9 +16,22 @@ local function DeepEquals(t1: table, t2: table): boolean
 		if checkedKeys[k] then
 			continue
 		end
-		if type(v) == "table" then
+		local valueType = type(v)
+		if valueType == "table" then
 			if not DeepEquals(t1[k], v) then
 				return false
+			end
+		elseif valueType == "userdata" then
+			local isReactive = getmetatable(v) == "ReactiveTable"
+			if isReactive then
+				if not DeepEquals(t1[k], v) then
+					return false
+				end
+			else
+				-- if not a Reactive object – compare references
+				if t1[k] ~= v then
+					return false
+				end
 			end
 		elseif t1[k] ~= v then
 			return false
