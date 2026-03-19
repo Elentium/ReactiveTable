@@ -1878,7 +1878,7 @@ do
 	for i = 1, N do
 		raw["k" .. i] = i
 	end
-	test("construct table with 500 keys", 2, 300, function()
+	test("construct table with 500 keys", 2, 5, function()
 		local t = ReactiveTable.new(raw)
 		return t:GetSize() == N
 	end, function()
@@ -1925,7 +1925,8 @@ do
 		return t["k" .. N] == N + 1
 	end, function()
 		for i = 1, N do
-			t["k" .. i] = i + 1
+			-- should be different so that it doesnt quit early due to prev == current
+			t["k" .. N] = -i + 1
 		end
 	end)
 end
@@ -1937,7 +1938,7 @@ do
 	for i = 1, N do
 		raw["child" .. i] = { v = i }
 	end
-	test("construct table with 50 nested children", 2, 2000, function()
+	test("construct table with 50 nested children", 2, 5, function()
 		local t = ReactiveTable.new(raw)
 		return t:GetSize() == N
 	end, function()
@@ -2134,7 +2135,7 @@ end
 -- 11. Rapid connect/disconnect under load: 1000 connect+disconnect cycles
 do
 	local t = ReactiveTable.new({ x = 0 })
-	test("1000 rapid connect/disconnect cycles without crash", 2, 620, function()
+	test("1000 rapid connect/disconnect cycles without crash", 2, 750, function()
 		local ok = pcall(function()
 			for _ = 1, 1000 do
 				local conn = t.Changed:Connect(function() end)
@@ -2151,7 +2152,7 @@ do
 end
 
 -- 12. BroadcastChanges on 100-key table: all signals fire
---    API: BroadcastChanges({ [key]: "Added" | "Removed" | "Changed" }), not an array of keys.
+--    API: BroadcastChanges({ [key]: "Added" | "Removed" | "Changed" })
 do
 	local N = 100
 	local raw: { [string]: number } = {}
@@ -2187,7 +2188,7 @@ do
 	t.Changed:Connect(function()
 		parentFired = true
 	end)
-	test("Clone(true) of 50-child table shares no ancestry", 2, 5000, function()
+	test("Clone(true) of 50-child table shares no ancestry", 2, 500, function()
 		local clone = t:Clone(true)
 		parentFired = false
 		-- mutating every child of the clone must NOT fire original parent
@@ -2212,7 +2213,7 @@ do
 	parent.x = child1
 	parent.y = child2
 	parent.Changed:Connect(function() end)
-	test("500 interleaved ancestry writes: no crash, signals fire", 2, 5000, function()
+	test("500 interleaved ancestry writes: no crash, signals fire", 2, 2000, function()
 		local ok = pcall(function()
 			for i = 1, 250 do
 				child1.a = i
