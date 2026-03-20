@@ -45,8 +45,6 @@ wally install
 
 ## Quick Start
 ```luau
---!strict
-
 local ReactiveTable = require(path.to.module) -- see Installation notes
 
 local reactive = ReactiveTable.new({ hello = "world" })
@@ -69,7 +67,6 @@ reactive.someNewKey = 123 -- triggers New
 
 ### Nested tables + ancestor bubbling (1-level)
 ```luau
---!strict
 local ReactiveTable = require(path.to.module)
 
 local reactive = ReactiveTable.new({ a = { b = 10 } })
