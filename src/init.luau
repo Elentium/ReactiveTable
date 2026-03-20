@@ -1,14 +1,51 @@
 --!strict
 --[[
-	[UNRELEASED] [BETA]
+	[BETA]
 	ReactiveTable V0.1.0
 	by IAMNOTULTRA3 (a.k.a Elite, Elentium)
 	Apache 2.0 License
 	
-	DX-Oriented convenient table implementation
-	
-	Warnings:
-	- Due to LuaU limitations, nested tables do not have ReactiveTable `Signals` autocomplete,
+	DX-Oriented observable table implementation
+
+	You can treat ReactiveTable objects the same as tables but with automatic reactivity, for example:
+	```luau
+		local ReactiveTable = require(path.to.module)
+
+		local reactive = ReactiveTable.new({ hello = "world" })
+
+		-- same read/write syntax as normal tables
+		print(reactive.hello) -- output: "world"
+
+		reactive.hello = "goodbye"
+
+		-- while having TONS of features, example:
+		reactive:BindToKeyChanged("hello", function(newValue: string): ()
+			print(`key "hello" was changed, new value: {newValue}`)
+		end)
+		reactive.hello = "grr" -- triggers the function above
+
+		reactive.New:Connect(function(NewKey: string, NewValue: any)
+			print(`New key added: {NewKey}, new value: {NewValue}`)
+		end)
+		reactive.someNewKey = 11 -- triggers the function above
+
+		reactive:Insert("gg") -- table.insert
+		print(reactive:Find("gg")) -- table.find
+		print(reactive:Remove()) -- table.remove
+		
+		local clone = reactive:Clone(true) -- true = deep copy, false = shallow copy
+
+		-- and way more features!
+	```
+
+	This can be really useful for data replication wrappers, ui systems, etc.
+	where you do not have to manually call the update function or do the painful Data:Set("SomeKey", SomeValue)
+	ReactiveTable overhead compared to those 2 methods is relatively small and sometimes it is even faster
+
+	To ensure ReactiveTable matches your expectations there is a sophisticated 2000+ lines test script(`src/test`) that you can require and it will run the tests
+
+	Notes:
+	- Due to LuaU limitations, accessing nested tables contents will not show the object API,
 		Example:
 		```luau
 			local ReactiveTable = require(path.to.module)
@@ -21,14 +58,70 @@
 			})
 			
 			-- attempt to access value
-			reactive. <-- the autocomplete shows both Signals and the attributes
+			reactive. <-- the autocomplete shows both object API and the table contents
 			
-			reactive.nested1. <-- the autocomplete only shows the attributes, but cannot show the Signals
+			reactive.nested1. <-- the autocomplete only shows the table contents, but cannot show the object API
 		```
+        However you can make so that any nested reactive tables have autocomplete by annotating the type of the table.
+		Example:
+		```luau
+			local ReactiveTable = require(path.to.module)
+			
+			local reactive = ReactiveTable.new({
+				nested1 = {
+					abc = "hello"
+				},
+				nested2 = {}
+			})
+
+			type ReactiveTable = ReactiveTable.ReactiveTable
+
+			local nested1 = reactive.nested1 :: ReactiveTable<typeof(reactive.nested1)>
+			nested1. <-- the autocomplete will show the API & the table contents
+		```
+		Additionally, you can simply create a ReactiveTable object before nesting it,
+		Example:
+		```luau
+		local ReactiveTable = require(path.to.module)
+
+		local nested1 = ReactiveTable.new({ abc = "hello" })
+		local nested2 = ReactiveTable.new()
+
+		local reactive = ReactiveTable.new({ nested1 = nested1, nested2 = nested2 })
+		reactive.nested1. <-- shows both object API and the table contents
+		```
+
 	- This library prioritizes developer experience over pure performance
+	- If there are any nested tables inside the ReactiveTable objects, they will be wrapped into ReactiveTable objects too
+	- The library provides 1-level ancestor notification, for example:
+		```luau
+			local ReactiveTable = require(path.to.module)
+			local reactive = ReactiveTable.new({ a = { b = 10 } })
+			reactive.Changed:Connect(function(key: string, value: any)
+				print(`{key}: {value}`)
+			end)
+			reactive.a.b = 10 -- this fires both the `a` ReactiveTable and it's ancestor `reactive`
+		```
+		however:
+		```luau
+			local ReactiveTable = require(path.to.module)
+			local reactive = ReactiveTable.new({ a = { b = { c = 10 } } })
+			reactive.Changed:Connect(function(key: string, value: any)
+				print(`{key}: {value}`)
+			end)
+			reactive.a.b.c = 10 -- this fires both the `b` ReactiveTable and it's ancestor `a`, but it does not notify level 2 ancestor (reactive)
+		```
+		The reason it does only 1-level notification is for performance and personal view reasons
 
 	Credits:
 	Stravant for the Signal implementation
+
+	Github:
+	https://github.com/Elentium/ReactiveTable
+
+	Wally:
+	https://wally.run/package/elentium/reactivetable
+	elentium/reactivetable@0.1.0
 ]]
 --------------------------------------------------------------------------------
 -- TYPE DEFINITIONS
@@ -52,10 +145,11 @@ export type Signals = {
 	-- <key, value>
 	Changed: SignalPublic<any, any>,
 	New: SignalPublic<any, any>,
+	-- <key>
 	Removed: SignalPublic<any>,
-} & { [string]: any }
+} & { [string]: any } -- < defining indexer for strict type checker
 
-export type ReactiveTable<T = {}> = T & Signals & {
+export type ReactiveAPI<T> = {
 	GetSource: (self: any) -> T,
 	GetSize: (self: any) -> number,
 	IsFrozen: (self: any) -> boolean,
@@ -80,6 +174,8 @@ export type ReactiveTable<T = {}> = T & Signals & {
 	Freeze: (self: any) -> (),
 	Unfreeze: (self: any) -> (),
 }
+
+export type ReactiveTable<T = {}> = T & Signals & ReactiveAPI<T>
 
 type userdata = any
 
@@ -141,7 +237,7 @@ local function iterator(tbl: { [any]: any }, lastKey: any?): (any, any)
 end
 
 --[[
-Removes a single key reference from a child table's ancestor entry.
+Removes a single key reference from a child table's ancestor entry
 
 @param rawChild – The child table
 @param ancestor – The ancestor of the child
@@ -167,7 +263,7 @@ local function removeAncestorKey(rawChild: { [any]: any }, ancestor: userdata, k
 end
 
 --[[
-Adds a single key reference to a child userdata's ancestor entry.
+Adds a single key reference to a child userdata's ancestor entry
 
 @param child – The child userdata
 @param ancestor – The ancestor of the child
@@ -187,7 +283,7 @@ local function addAncestorKey(child: userdata, ancestor: userdata, key: any): ()
 end
 
 --[[
-Fires Changed on every ancestor that tracks @param self, for every key they track it under.
+Fires Changed on every ancestor that tracks @param self, for every key they track it under
 
 @param self – The self userdata
 @param ancestors – The ancestors of the self
@@ -274,7 +370,7 @@ end
     @param tbl – The table which will be wrapped
     @returns The ReactiveTable object
 ]]
-function ReactiveTable.new<T>(tbl: ({ [any]: any } & T)?): ReactiveTable<T>
+function ReactiveTable.new<T>(tbl: (({ [any]: any }) & T)?): ReactiveTable<T>
 	return new(tbl)
 end
 
@@ -376,6 +472,11 @@ function methods:Remove(index: number?): any
 	-- if the value is a table, we need to properly handle ancestry
 	if type(value) == "table" then
 		removeAncestorKey(value, self, idx)
+	elseif type(value) == "userdata" then
+		local valueReg = registry[value]
+		if valueReg then
+			removeAncestorKey(valueReg._table, self, idx)
+		end
 	end
 
 	if not reg._signalsFrozen then
@@ -550,6 +651,11 @@ function methods:Clear(): ()
 		if type(value) == "table" then
 			removeAncestorKey(value, self, i)
 			value = tableLookup[value]
+		elseif type(value) == "userdata" then
+			local valueReg = registry[value]
+			if valueReg then
+				removeAncestorKey(valueReg._table, self, i)
+			end
 		end
 		if not _signalsFrozen then
 			(_signals.Removed :: SignalPrivate<any, any>):Fire(i, value)
@@ -566,7 +672,7 @@ Sorts the ReactiveTable object
 
 @param comparator – The comparator function
 ]]
-function methods:Sort(comparator: (any, any) -> boolean): ()
+function methods:Sort(comparator: ((any, any) -> boolean)?): ()
 	local reg = registry[self]
 	if not reg then
 		error(`Invalid/Destroyed userdata`)
@@ -578,35 +684,44 @@ function methods:Sort(comparator: (any, any) -> boolean): ()
 	local _table = reg._table
 
 	-- wrap values for the comparator so callers always receive ReactiveTable userdatas
-	table.sort(_table, function(v0: any, v1: any): boolean
-		return comparator(
-			if type(v0) == "table" then tableLookup[v0] else v0,
-			if type(v1) == "table" then tableLookup[v1] else v1
-		)
-	end)
+	table.sort(
+		_table,
+		if comparator then 
+			function(v0: any, v1: any): boolean
+				return comparator(
+					if type(v0) == "table" then tableLookup[v0] else v0,
+					if type(v1) == "table" then tableLookup[v1] else v1
+				)
+			end
+		else nil
+	)
 
-	-- collect {[rawChild]: {[newIndex]: true}} for all table-valued slots
-	local newKeys: { [{ [any]: any }]: { [number]: boolean } } = {}
+	-- collect {[childUserdata]: {[newIndex]: true}} for all reactive child slots
+	local newKeys: { [userdata]: { [number]: boolean } } = {}
 	for i = 1, #_table do
 		local v = _table[i]
-		if type(v) == "table" then
-			local entry = newKeys[v]
+		local child: userdata? = nil
+		local valueType = type(v)
+		if valueType == "table" then
+			child = tableLookup[v]
+		elseif valueType == "userdata" and registry[v] then
+			child = v
+		end
+		if child then
+			local entry = newKeys[child]
 			if entry then
 				entry[i] = true
 			else
-				newKeys[v] = { [i] = true }
+				newKeys[child] = { [i] = true }
 			end
 		end
 	end
 
 	-- apply the rebuilt key-sets, replacing whatever indices were stored
-	for rawChild, indices in newKeys do
-		local child = tableLookup[rawChild]
-		if child then
-			local childReg = registry[child]
-			if childReg then
-				childReg._ancestors[self] = indices
-			end
+	for child, indices in newKeys do
+		local childReg = registry[child]
+		if childReg then
+			childReg._ancestors[self] = indices
 		end
 	end
 end

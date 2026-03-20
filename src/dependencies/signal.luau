@@ -165,7 +165,7 @@ end
 function Signal:DisconnectAll()
 	local conn = self._handlerListHead
 	while conn do
-		conn.Connected = false
+		conn._connected = false
 		conn = conn._next
 	end
 	self._handlerListHead = false

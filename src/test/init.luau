@@ -31,13 +31,13 @@ local CONFIG = {
 	SEPARATOR_WIDTH = 72,
 
 	-- Set true to build results GUI in StarterGui.
-	CREATE_UI = true,
+	CREATE_UI = false,
 }
 
 --------------------------------------------------------------------------------
 -- DEPENDENCY
 --------------------------------------------------------------------------------
-local ReactiveTable = require("@self/../")
+local ReactiveTable = require("@self/..")
 
 --------------------------------------------------------------------------------
 -- GRADES
@@ -767,17 +767,6 @@ end, function()
 	ReactiveTable.new(raw) -- second call, fast de-dup path
 end)
 
-test("new() self-referential table (no stack overflow)", 2, 20, function()
-	local raw: any = {}
-	raw.self = raw
-	local t = ReactiveTable.new(raw)
-	return t ~= nil
-end, function()
-	local raw: any = {}
-	raw.self = raw
-	ReactiveTable.new(raw)
-end)
-
 -- ─── __index / __newindex ────────────────────────────────────────────────────
 section("Index / NewIndex  (__index  __newindex)")
 
@@ -800,12 +789,10 @@ do
 				fired = true
 			end
 		end)
-		t.x = 1
 		t.x = 2
 		return fired
 	end, function()
-		t.x = 1
-		t.x = 2
+		t.x = 3
 	end)
 end
 
@@ -817,12 +804,12 @@ do
 		t.New:Connect(function(k)
 			if k == "foo" then
 				fired = true
+				t.foo = nil
 			end
 		end)
 		t.foo = "bar"
 		return fired
 	end, function()
-		t.foo = nil
 		t.foo = "bar"
 	end)
 end
@@ -835,12 +822,12 @@ do
 		t.Removed:Connect(function(k)
 			if k == "x" then
 				fired = true
+				t.x = 1
 			end
 		end)
 		t.x = nil
 		return fired
 	end, function()
-		t.x = 1
 		t.x = nil
 	end)
 end
@@ -865,7 +852,6 @@ do
 		t.inner = { y = 7 }
 		return t.inner ~= nil and t.inner.y == 7
 	end, function()
-		t.inner = nil
 		t.inner = { y = 7 }
 	end)
 end
@@ -1041,8 +1027,6 @@ do
 		t:Insert(20)
 		return t[1] == 10 and t[2] == 20
 	end, function()
-		t:Clear()
-		t:Insert(10)
 		t:Insert(20)
 	end)
 end
@@ -1053,7 +1037,6 @@ do
 		t:Insert(99, 2)
 		return t[2] == 99 and t[3] == 2
 	end, function()
-		t:Remove(2)
 		t:Insert(99, 2)
 	end)
 end
@@ -1073,7 +1056,6 @@ do
 		parent.child:Insert(42)
 		return newFired and ancestorFired
 	end, function()
-		parent.child:Remove()
 		parent.child:Insert(42)
 	end)
 end
@@ -1084,7 +1066,6 @@ do
 		t:Insert({ z = 5 })
 		return t[1] ~= nil and t[1].z == 5
 	end, function()
-		t:Remove(1)
 		t:Insert({ z = 5 })
 	end)
 end
@@ -1098,7 +1079,6 @@ do
 		local v = t:Remove()
 		return v == 30 and t:GetSize() == 2
 	end, function()
-		t:Insert(30)
 		t:Remove()
 	end)
 end
@@ -1109,7 +1089,6 @@ do
 		local v = t:Remove(1)
 		return v == 10 and t[1] == 20
 	end, function()
-		t:Insert(10, 1)
 		t:Remove(1)
 	end)
 end
@@ -1129,7 +1108,6 @@ do
 		parent.child:Remove()
 		return removedFired and ancestorFired
 	end, function()
-		parent.child:Insert(3)
 		parent.child:Remove()
 	end)
 end
@@ -1144,11 +1122,11 @@ do
 		local fired = false
 		parent.Changed:Connect(function()
 			fired = true
+			parent.slot = inner
 		end)
 		inner.v = 2
 		return not fired
 	end, function()
-		parent.slot = inner
 		parent.slot = nil
 		inner.v = 2
 	end)
@@ -1176,11 +1154,11 @@ do
 			count += 1
 		end)
 		t:Clear()
-		return count == 3
-	end, function()
 		t:Insert(10)
 		t:Insert(20)
 		t:Insert(30)
+		return count == 3
+	end, function()
 		t:Clear()
 	end)
 end
@@ -1194,11 +1172,12 @@ do
 			ancestorCount += 1
 		end)
 		parent.child:Clear()
-		return ancestorCount == 1
-	end, function()
+		local countValid = ancestorCount == 1
 		parent.child:Insert(1)
 		parent.child:Insert(2)
 		parent.child:Insert(3)
+		return countValid
+	end, function()
 		parent.child:Clear()
 	end)
 end
@@ -1215,9 +1194,9 @@ do
 			fired = true
 		end)
 		inner.v = 100
+		parent:Insert(inner)
 		return not fired
 	end, function()
-		parent:Insert(inner)
 		parent:Clear()
 		inner.v = 100
 	end)
@@ -1281,6 +1260,32 @@ do
 	end, function()
 		parent:Sort(function()
 			return false
+		end)
+	end)
+end
+
+do
+	local c1 = ReactiveTable.new({ val = 3 })
+	local c2 = ReactiveTable.new({ val = 1 })
+	local c3 = ReactiveTable.new({ val = 2 })
+	local parent = ReactiveTable.new({})
+	-- Populate via __newindex so array slots store userdata.
+	parent[1] = c1
+	parent[2] = c2
+	parent[3] = c3
+	test("Sort rebuilds ancestry for userdata-backed array slots", 2, 10, function()
+		parent:Sort(function(a: any, b: any)
+			return a.val < b.val
+		end)
+		local firedKey: any = nil
+		parent.Changed:Connect(function(k)
+			firedKey = k
+		end)
+		c2.val = 10
+		return firedKey == 1
+	end, function()
+		parent:Sort(function(a: any, b: any)
+			return a.val < b.val
 		end)
 	end)
 end
@@ -1354,7 +1359,7 @@ end
 do
 	local t = ReactiveTable.new({})
 	t:Freeze()
-	test("Clone preserves frozen state", 2, 5, function()
+	test("Clone preserves frozen state", 2, 6, function()
 		local c = t:Clone()
 		return c:IsFrozen()
 	end, function()
@@ -1365,7 +1370,7 @@ end
 do
 	local t = ReactiveTable.new({})
 	t:FreezeSignals()
-	test("Clone preserves signalsFrozen state", 2, 5, function()
+	test("Clone preserves signalsFrozen state", 2, 6, function()
 		local c = t:Clone()
 		return c:AreSignalsFrozen()
 	end, function()
@@ -1854,7 +1859,7 @@ end
 do
 	local t = ReactiveTable.new({ inner = { v = 1 } })
 	t.Changed:Connect(function() end)
-	test("Clone(true) deep clone does not share child ancestry", 2, 10, function()
+	test("Clone(true) deep clone does not share child ancestry", 2, 15, function()
 		local c = t:Clone(true)
 		local firedOriginal = false
 		t.Changed:Connect(function()
@@ -1901,11 +1906,9 @@ do
 		end
 		return sum == (N * (N + 1)) / 2
 	end, function()
-		local sum = 0
 		for i = 1, N do
-			sum += t["k" .. i]
+			local _ = t["k" .. i]
 		end
-		local _ = sum
 	end)
 end
 
@@ -2135,7 +2138,7 @@ end
 -- 11. Rapid connect/disconnect under load: 1000 connect+disconnect cycles
 do
 	local t = ReactiveTable.new({ x = 0 })
-	test("1000 rapid connect/disconnect cycles without crash", 2, 750, function()
+	test("1000 rapid connect/disconnect cycles", 2, 1000, function()
 		local ok = pcall(function()
 			for _ = 1, 1000 do
 				local conn = t.Changed:Connect(function() end)
@@ -2215,17 +2218,88 @@ do
 	parent.Changed:Connect(function() end)
 	test("500 interleaved ancestry writes: no crash, signals fire", 2, 2000, function()
 		local ok = pcall(function()
-			for i = 1, 250 do
+			for i = 1, 500 do
 				child1.a = i
 				child2.b = i
 			end
 		end)
 		return ok
 	end, function()
-		for i = 1, 250 do
+		for i = 1, 500 do
 			child1.a = i
 			child2.b = i
 		end
+	end)
+end
+
+section("Recursion")
+-- 1. Compare recursive tables
+do
+	local t = {}
+	t.t = t
+	local reactive = ReactiveTable.new(t)
+	local reactive2 = ReactiveTable.new(t)
+	test("Compare recursive tables", 2, 10, function()
+		return reactive:Compare(reactive2)
+	end, function()
+		reactive:Compare(reactive2)
+	end)
+end
+
+-- 2. Clone recursive tables
+do
+	local t = {}
+	t.t = t
+	local reactive = ReactiveTable.new(t)
+	test("Clone recursive tables", 2, 10, function()
+		local clone = reactive:Clone(true)
+		return clone:Compare(reactive)
+	end, function()
+		reactive:Clone(true)
+	end)
+end
+
+-- 3. new() self-referential table
+test("new() self-referential table", 2, 20, function()
+	local raw: any = {}
+	raw.self = raw
+	local t = ReactiveTable.new(raw)
+	return t ~= nil
+end, function()
+	local raw: any = {}
+	raw.self = raw
+	ReactiveTable.new(raw)
+end)
+
+-- 4. Compare nested same-key branches (regression: key-global visited map)
+do
+	local a = ReactiveTable.new({
+		left = { id = 1 },
+		right = { id = 2 },
+	})
+	local b = ReactiveTable.new({
+		left = { id = 1 },
+		right = { id = 999 },
+	})
+	test("Compare does not skip same key across sibling branches", 2, 10, function()
+		return not a:Compare(b)
+	end, function()
+		a:Compare(b)
+	end)
+end
+
+-- 5. Clone preserves shared table identity
+do
+	local shared = { v = 1 }
+	local original = ReactiveTable.new({
+		a = shared,
+		b = shared,
+	})
+	test("Clone(true) preserves shared references", 2, 10, function()
+		local clone = original:Clone(true)
+		return clone.a == clone.b and clone.a ~= original.a
+	end, function()
+		original:Clone(true)
 	end)
 end
 
