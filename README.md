@@ -1,4 +1,4 @@
-# ReactiveTable V0.1.0
+# ReactiveTable V1
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue?style=flat-square" alt="License" /></a>
@@ -31,7 +31,7 @@ It is designed to reduce the boilerplate of manual update calls while keeping th
 Add ReactiveTable to your `wally.toml`:
 ```toml
 [dependencies]
-ReactiveTable = "elentium/reactivetable@0.1.0"
+ReactiveTable = "elentium/reactivetable@0.1.1"
 ```
 
 Then run:

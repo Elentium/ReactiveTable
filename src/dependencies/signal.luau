@@ -60,7 +60,7 @@ Connection.__index = Connection
 
 function Connection.new(signal, fn)
 	return setmetatable({
-		_connected = true,
+		Connected = true,
 		_signal = signal,
 		_fn = fn,
 		_next = false,
@@ -69,7 +69,7 @@ function Connection.new(signal, fn)
 end
 
 function Connection:Disconnect()
-	self._connected = false
+	self.Connected = false
 
 	-- Unhook the node, but DON'T clear it. That way any fire calls that are
 	-- currently sitting on this node will be able to iterate forwards off of
@@ -125,7 +125,7 @@ end
 function Signal:Fire(...)
 	local item = self._handlerListHead
 	while item do
-		if item._connected then
+		if item.Connected then
 			if not freeRunnerThread then
 				freeRunnerThread = coroutine.create(runEventHandlerInFreeThread)
 				-- Get the freeRunnerThread to the first yield
@@ -154,7 +154,7 @@ end
 function Signal:Once(fn)
 	local cn
 	cn = self:Connect(function(...)
-		if cn._connected then
+		if cn.Connected then
 			cn:Disconnect()
 		end
 		fn(...)
@@ -165,7 +165,7 @@ end
 function Signal:DisconnectAll()
 	local conn = self._handlerListHead
 	while conn do
-		conn._connected = false
+		conn.Connected = false
 		conn = conn._next
 	end
 	self._handlerListHead = false

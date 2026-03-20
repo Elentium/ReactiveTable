@@ -1,7 +1,7 @@
 --!strict
 --[[
 	[BETA]
-	ReactiveTable V0.1.0
+	ReactiveTable V0.1.1
 	by IAMNOTULTRA3 (a.k.a Elite, Elentium)
 	Apache 2.0 License
 	
@@ -121,7 +121,7 @@
 
 	Wally:
 	https://wally.run/package/elentium/reactivetable
-	elentium/reactivetable@0.1.0
+	elentium/reactivetable@0.1.1
 ]]
 --------------------------------------------------------------------------------
 -- TYPE DEFINITIONS
